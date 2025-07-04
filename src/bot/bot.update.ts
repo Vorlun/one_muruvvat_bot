@@ -13,15 +13,20 @@ export class BotUpdate {
 
   @On('text')
   async onText(@Ctx() ctx: Context) {
-    const text = ctx.message!["text"];
+    const text = ctx.message!['text'];
 
     if (text === 'Sahiy') {
       await this.botService.onRoleSelected(ctx);
     } else if (text === 'Sabrli') {
-      await ctx.reply("📌 Sabrli bo'limi hali tayyor emas.");
+      await this.botService.createSabrli(ctx);
     } else {
       await this.botService.onText(ctx);
     }
+  }
+
+  @On('location')
+  async onLocation(@Ctx() ctx: Context) {
+    await this.botService.onLocation(ctx);
   }
 
   @Action('check_subscription')

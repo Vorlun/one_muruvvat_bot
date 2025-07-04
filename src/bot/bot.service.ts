@@ -153,7 +153,7 @@ export class BotService {
                 { text: "📞 Admin bilan bog'lanish" },
                 { text: '⚙️ Sozlamalar' },
               ],
-              [{ text: '🏠 Asosiy menyu' }],
+              [{ text: 'Asosiy menu' }],
             ],
             resize_keyboard: true,
           },
@@ -180,12 +180,15 @@ export class BotService {
       if (!(ctx.message && 'text' in ctx.message)) return;
       const messageText = ctx.message.text;
 
+      if (messageText === 'Asosiy menu') {
+        return this.sendMainMenu(ctx);
+      }
+
       switch (user.last_state) {
         case 'sahiy_fullname':
           user.first_name = messageText;
           user.last_state = 'sahiy_phone';
           await user.save();
-
           await ctx.replyWithHTML(
             '📱 Telefon raqamingizni yuboring (masalan: +998901234567):',
           );
@@ -193,14 +196,69 @@ export class BotService {
 
         case 'sahiy_phone':
           user.phone_number = messageText;
-          user.last_state = 'sahiy_finish';
+          user.last_state = 'sahiy_location';
           await user.save();
-
           await ctx.replyWithHTML(
-            "✅ Sahiy sifatida ro'yxatdan o'tdingiz! Endi sahiy sahifasiga o'tdingiz.",
+            "📍 Ixtiyoriy: Joylashuvingizni yuborishingiz mumkin yoki o'tkazib yuboring:",
+            {
+              reply_markup: {
+                keyboard: [
+                  [{ text: '📍 Joylashuvni yuborish', request_location: true }],
+                  [{ text: "⏭ O'tkazib yuborish" }],
+                ],
+                resize_keyboard: true,
+              },
+            },
           );
+          break;
 
-          await this.sahiyPage(ctx);
+        case 'sahiy_location':
+          if (messageText === "⏭ O'tkazib yuborish") {
+            user.last_state = 'sahiy_finish';
+            await user.save();
+            await ctx.replyWithHTML("✅ Sahiy sifatida ro'yxatdan o'tdingiz!", {
+              reply_markup: { remove_keyboard: true },
+            });
+            await this.sahiyPage(ctx);
+          }
+          break;
+
+        case 'sabrli_fullname':
+          user.first_name = messageText;
+          user.last_state = 'sabrli_phone';
+          await user.save();
+          await ctx.replyWithHTML(
+            '📱 Telefon raqamingizni yuboring (masalan: +998901234567):',
+          );
+          break;
+
+        case 'sabrli_phone':
+          user.phone_number = messageText;
+          user.last_state = 'sabrli_region';
+          await user.save();
+          await ctx.replyWithHTML(
+            '🏙 Viloyatni yuboring (masalan: Toshkent viloyati):',
+          );
+          break;
+
+        case 'sabrli_region':
+          user.region = messageText;
+          user.last_state = 'sabrli_district';
+          await user.save();
+          await ctx.replyWithHTML(
+            '🏘 Tumaningizni yuboring (masalan: Chirchiq tumani):',
+          );
+          break;
+
+        case 'sabrli_district':
+          user.district = messageText;
+          user.last_state = 'sabrli_finish';
+          await user.save();
+          await ctx.replyWithHTML(
+            "✅ Sabrli sifatida ro'yxatdan o'tdingiz va endi Sabrli sahifasiga o'tdingiz!",
+            { reply_markup: { remove_keyboard: true } },
+          );
+          await this.sabrliPage(ctx);
           break;
 
         default:
@@ -209,5 +267,101 @@ export class BotService {
     } catch (error) {
       console.error('Error in onText:', error);
     }
+  }
+
+  async onLocation(ctx: Context) {
+    try {
+      const user_id = ctx.from?.id;
+      if (!user_id || !('location' in ctx.message!)) return;
+
+      const user = await this.botModel.findByPk(user_id);
+      if (!user) {
+        return ctx.replyWithHTML('Iltimos, <b>/start</b> tugmasini bosing.', {
+          parse_mode: 'HTML',
+        });
+      }
+
+      if (user.last_state === 'sahiy_location') {
+        const { latitude, longitude } = ctx.message.location!;
+        user.location = `${latitude}|${longitude}`;
+        user.last_state = 'sahiy_finish';
+        await user.save();
+
+        await ctx.replyWithHTML(
+          "✅ Joylashuvingiz saqlandi va Sahiy sifatida ro'yxatdan o'tdingiz!",
+          { reply_markup: { remove_keyboard: true } },
+        );
+
+        await this.sahiyPage(ctx);
+      }
+    } catch (error) {
+      console.error('Error in onLocation:', error);
+    }
+  }
+
+  async createSabrli(ctx: Context) {
+    try {
+      const user_id = ctx.from?.id;
+      if (!user_id) {
+        return ctx.replyWithHTML('User ID aniqlanmadi.');
+      }
+
+      const user = await this.botModel.findByPk(user_id);
+      if (!user) {
+        return ctx.replyWithHTML(
+          'Iltimos, botni ishga tushirish uchun <b>/start</b> tugmasini bosing.',
+          { parse_mode: 'HTML' },
+        );
+      }
+
+      if (user.last_state === 'sabrli_finish') {
+        return this.sabrliPage(ctx);
+      }
+
+      user.last_state = 'sabrli_fullname';
+      user.role = 'patient';
+      await user.save();
+
+      await ctx.replyWithHTML(
+        "🙌 Sabrli sifatida ro'yxatdan o'tish uchun to'liq ismingizni yuboring:",
+      );
+    } catch (error) {
+      console.error('Error in createSabrli:', error);
+    }
+  }
+
+  async sabrliPage(ctx: Context) {
+    try {
+      await ctx.replyWithHTML(
+        "<b>🙌 Sabrli sahifasiga xush kelibsiz!</b>\n\nKerakli bo'limni tanlang:",
+        {
+          reply_markup: {
+            keyboard: [
+              [{ text: '📨 Murojaat yuborish' }],
+              [{ text: "📞 Admin bilan bog'lanish" },
+              { text: '⚙️ Sozlamalar' }],
+              [{ text: 'Asosiy menu' }],
+            ],
+            resize_keyboard: true,
+          },
+          parse_mode: 'HTML',
+        },
+      );
+    } catch (error) {
+      console.error('Error in sabrliPage:', error);
+    }
+  }
+  async sendMainMenu(ctx: Context) {
+    await ctx.replyWithHTML(
+      '<b>Asosiy menu</b>\n\nBotdan kim sifatida foydalanishni tanlang:',
+      {
+        parse_mode: 'HTML',
+        reply_markup: {
+          keyboard: [[{ text: 'Sabrli' }, { text: 'Sahiy' }]],
+          resize_keyboard: true,
+          one_time_keyboard: false,
+        },
+      },
+    );
   }
 }
