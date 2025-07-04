@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Bot } from './model/bot.model';
 import { BOT_NAME, CHANNEL_USERNAME } from '../app.constants';
-import { InjectBot, On, Ctx, Action } from 'nestjs-telegraf';
-import { Context, Telegraf } from 'telegraf';
+import { InjectBot, Ctx } from 'nestjs-telegraf';
+import { Context, Telegraf, Markup } from 'telegraf';
 
 @Injectable()
 export class BotService {
@@ -32,7 +32,7 @@ export class BotService {
       {
         parse_mode: 'HTML',
         reply_markup: {
-          keyboard: [[{ text: 'Sabrlilar' }, { text: 'Sahiylar' }]],
+          keyboard: [[{ text: 'Sabrli' }, { text: 'Sahiy' }]],
           resize_keyboard: true,
           one_time_keyboard: false,
         },
@@ -51,8 +51,7 @@ export class BotService {
       );
 
       if (['member', 'creator', 'administrator'].includes(member.status)) {
-        // Kanalga obuna bo'lgan bo'lsa keyingi bosqichga o'tish (tugma chiqarmasdan)
-        return this.nextStep(ctx);
+        return this.createSahiy(ctx);
       } else {
         await this.askToJoinChannel(ctx);
       }
@@ -80,7 +79,6 @@ export class BotService {
     );
   }
 
-
   async onCheckSubscription(ctx: Context) {
     const user_id = ctx.from?.id;
     if (!user_id) {
@@ -97,7 +95,7 @@ export class BotService {
       if (['member', 'creator', 'administrator'].includes(member.status)) {
         await ctx.answerCbQuery("✅ A'zo bo'ldingiz!", { show_alert: false });
         await ctx.deleteMessage();
-        return this.nextStep(ctx);
+        return this.createSahiy(ctx);
       } else {
         await ctx.answerCbQuery("❌ Siz hali kanalga a'zo emassiz.", {
           show_alert: true,
@@ -110,11 +108,106 @@ export class BotService {
     }
   }
 
-  // Keyingi bosqichga o'tishda ishlatiladi (placeholder)
-  async nextStep(ctx: Context) {
-    await ctx.reply(
-      '✅ Kanalga obuna bo‘lish tasdiqlandi. Keyingi bosqichga o‘tdingiz.',
-    );
-    // Shu yerga keyingi qatorlarni davom ettirasiz
+  async createSahiy(ctx: Context) {
+    try {
+      const user_id = ctx.from?.id;
+      if (!user_id) {
+        return ctx.replyWithHTML('User ID aniqlanmadi.');
+      }
+
+      const user = await this.botModel.findByPk(user_id);
+      if (!user) {
+        return ctx.replyWithHTML(
+          'Iltimos, botni ishga tushirish uchun <b>/start</b> tugmasini bosing.',
+          { parse_mode: 'HTML' },
+        );
+      }
+
+      if (user.last_state === 'sahiy_finish') {
+        return this.sahiyPage(ctx);
+      }
+
+      user.last_state = 'sahiy_fullname';
+      await user.save();
+
+      await ctx.replyWithHTML(
+        "🙌 Sahiy sifatida ro'yxatdan o'tish uchun to'liq ismingizni yuboring:",
+      );
+    } catch (error) {
+      console.error('Error in createSahiy:', error);
+    }
+  }
+
+  async sahiyPage(ctx: Context) {
+    try {
+      await ctx.replyWithHTML(
+        "<b>🙌 Sahiy sahifasiga xush kelibsiz!</b>\n\nKerakli bo'limni tanlang:",
+        {
+          reply_markup: {
+            keyboard: [
+              [
+                { text: '🤝 Muruvvat qilish' },
+                { text: "👀 Sabrlilarni ko'rish" },
+              ],
+              [
+                { text: "📞 Admin bilan bog'lanish" },
+                { text: '⚙️ Sozlamalar' },
+              ],
+              [{ text: '🏠 Asosiy menyu' }],
+            ],
+            resize_keyboard: true,
+          },
+          parse_mode: 'HTML',
+        },
+      );
+    } catch (error) {
+      console.error('Error in sahiyPage:', error);
+    }
+  }
+
+  async onText(ctx: Context) {
+    try {
+      const user_id = ctx.from?.id;
+      if (!user_id) return;
+
+      const user = await this.botModel.findByPk(user_id);
+      if (!user) {
+        return ctx.replyWithHTML('Iltimos, <b>/start</b> tugmasini bosing.', {
+          parse_mode: 'HTML',
+        });
+      }
+
+      if (!(ctx.message && 'text' in ctx.message)) return;
+      const messageText = ctx.message.text;
+
+      switch (user.last_state) {
+        case 'sahiy_fullname':
+          user.first_name = messageText;
+          user.last_state = 'sahiy_phone';
+          await user.save();
+
+          await ctx.replyWithHTML(
+            '📱 Telefon raqamingizni yuboring (masalan: +998901234567):',
+          );
+          break;
+
+        case 'sahiy_phone':
+          user.phone_number = messageText;
+          user.last_state = 'sahiy_finish';
+          await user.save();
+
+          await ctx.replyWithHTML(
+            "✅ Sahiy sifatida ro'yxatdan o'tdingiz! Endi sahiy sahifasiga o'tdingiz.",
+          );
+
+          await this.sahiyPage(ctx);
+          break;
+
+        default:
+          break;
+      }
+    } catch (error) {
+      console.error('Error in onText:', error);
+    }
   }
 }

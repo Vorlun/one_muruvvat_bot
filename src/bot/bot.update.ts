@@ -1,4 +1,4 @@
-import { Action, Ctx, Hears, Start, Update } from 'nestjs-telegraf';
+import { Update, Start, Ctx, On, Action, Hears } from 'nestjs-telegraf';
 import { BotService } from './bot.service';
 import { Context } from 'telegraf';
 
@@ -11,13 +11,21 @@ export class BotUpdate {
     await this.botService.start(ctx);
   }
 
-  @Hears(['Sabrlilar', 'Sahiylar'])
-  async onRole(@Ctx() ctx: Context) {
-    await this.botService.onRoleSelected(ctx);
+  @On('text')
+  async onText(@Ctx() ctx: Context) {
+    const text = ctx.message!["text"];
+
+    if (text === 'Sahiy') {
+      await this.botService.onRoleSelected(ctx);
+    } else if (text === 'Sabrli') {
+      await ctx.reply("📌 Sabrli bo'limi hali tayyor emas.");
+    } else {
+      await this.botService.onText(ctx);
+    }
   }
 
   @Action('check_subscription')
-  async checkSubscription(@Ctx() ctx: Context) {
+  async onCheckSubscription(@Ctx() ctx: Context) {
     await this.botService.onCheckSubscription(ctx);
   }
 }
