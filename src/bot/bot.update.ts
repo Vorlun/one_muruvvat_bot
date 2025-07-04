@@ -1,4 +1,4 @@
-import { Ctx, Hears, Start, Update } from 'nestjs-telegraf';
+import { Action, Ctx, Hears, Start, Update } from 'nestjs-telegraf';
 import { BotService } from './bot.service';
 import { Context } from 'telegraf';
 
@@ -16,4 +16,8 @@ export class BotUpdate {
     await this.botService.onRoleSelected(ctx);
   }
 
+  @Action('check_subscription')
+  async checkSubscription(@Ctx() ctx: Context) {
+    await this.botService.onCheckSubscription(ctx);
+  }
 }

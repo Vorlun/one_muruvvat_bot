@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Bot } from './model/bot.model';
 import { BOT_NAME, CHANNEL_USERNAME } from '../app.constants';
-import { InjectBot, On, Ctx } from 'nestjs-telegraf';
+import { InjectBot, On, Ctx, Action } from 'nestjs-telegraf';
 import { Context, Telegraf } from 'telegraf';
 
 @Injectable()
@@ -80,43 +80,33 @@ export class BotService {
     );
   }
 
-  @On('callback_query')
-  async onCallbackQuery(@Ctx() ctx: Context) {
-    if ('data' in ctx.callbackQuery!) {
-      const callbackData = ctx.callbackQuery?.data;
 
-      if (callbackData === 'check_subscription') {
-        const user_id = ctx.from?.id;
-        if (!user_id) {
-          await ctx.answerCbQuery('User ID aniqlanmadi.', { show_alert: true });
-          return;
-        }
+  async onCheckSubscription(ctx: Context) {
+    const user_id = ctx.from?.id;
+    if (!user_id) {
+      await ctx.answerCbQuery('User ID aniqlanmadi.', { show_alert: true });
+      return;
+    }
 
-        try {
-          const member = await ctx.telegram.getChatMember(
-            CHANNEL_USERNAME,
-            user_id,
-          );
+    try {
+      const member = await ctx.telegram.getChatMember(
+        CHANNEL_USERNAME,
+        user_id,
+      );
 
-          if (['member', 'creator', 'administrator'].includes(member.status)) {
-            await ctx.answerCbQuery("✅ A'zo bo'ldingiz!", {
-              show_alert: false,
-            });
-            await ctx.deleteMessage(); // Inline tugmani o'chirib yuborish
-            return this.nextStep(ctx);
-          } else {
-            await ctx.answerCbQuery("❌ Siz hali kanalga a'zo emassiz.", {
-              show_alert: true,
-            });
-          }
-        } catch {
-          await ctx.answerCbQuery("⚠️ Xatolik, qayta urinib ko'ring.", {
-            show_alert: true,
-          });
-        }
+      if (['member', 'creator', 'administrator'].includes(member.status)) {
+        await ctx.answerCbQuery("✅ A'zo bo'ldingiz!", { show_alert: false });
+        await ctx.deleteMessage();
+        return this.nextStep(ctx);
       } else {
-        await ctx.answerCbQuery("❌ Noma'lum tugma.", { show_alert: true });
+        await ctx.answerCbQuery("❌ Siz hali kanalga a'zo emassiz.", {
+          show_alert: true,
+        });
       }
+    } catch {
+      await ctx.answerCbQuery("⚠️ Xatolik, qayta urinib ko'ring.", {
+        show_alert: true,
+      });
     }
   }
 
